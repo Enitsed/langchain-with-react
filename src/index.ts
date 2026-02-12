@@ -1,41 +1,48 @@
-import { serve } from "bun";
-import index from "./index.html";
+import { ChatBedrockConverse } from '@langchain/aws';
+import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
+import { createAgent } from './agent';
+import index from './index.html';
 
-const server = serve({
+const model = new ChatBedrockConverse({
+  model: 'anthropic.claude-3-haiku-20240307-v1:0',
+  region: process.env.AWS_REGION || 'us-east-1',
+  temperature: 0.7,
+  maxTokens: 2048,
+});
+
+const agent = createAgent(model);
+
+function toLangChainMessages(messages: { role: string; content: string }[]) {
+  return messages.map((msg) => {
+    if (msg.role === 'user') return new HumanMessage(msg.content);
+    if (msg.role === 'assistant') return new AIMessage(msg.content);
+    return new SystemMessage(msg.content);
+  });
+}
+
+const server = Bun.serve({
   routes: {
-    // Serve index.html for all unmatched routes.
-    "/*": index,
+    '/*': index,
+    '/api/chat': {
+      async POST(req) {
+        const { messages } = (await req.json()) as {
+          messages: { role: string; content: string }[];
+        };
 
-    "/api/hello": {
-      async GET(req) {
-        return Response.json({
-          message: "Hello, world!",
-          method: "GET",
+        return new Response(agent.createStream(toLangChainMessages(messages)), {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
         });
       },
-      async PUT(req) {
-        return Response.json({
-          message: "Hello, world!",
-          method: "PUT",
-        });
-      },
-    },
-
-    "/api/hello/:name": async req => {
-      const name = req.params.name;
-      return Response.json({
-        message: `Hello, ${name}!`,
-      });
     },
   },
-
-  development: process.env.NODE_ENV !== "production" && {
-    // Enable browser hot reloading in development
+  development: process.env.NODE_ENV !== 'production' && {
     hmr: true,
-
-    // Echo console logs from the browser to the server
     console: true,
   },
 });
 
-console.log(`🚀 Server running at ${server.url}`);
+console.log(`Server running at ${server.url}`);
