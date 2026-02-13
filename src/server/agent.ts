@@ -71,9 +71,9 @@ function extractContent(content: unknown): string {
 
 export function createAgent(model: ChatBedrockConverse, checkpointer: MemorySaver) {
   const agent = createLangchainAgent({
-    llm: model,
+    model,
     tools,
-    prompt: SYSTEM_PROMPT,
+    systemPrompt: SYSTEM_PROMPT,
     checkpointer,
   });
 
