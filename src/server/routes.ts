@@ -1,15 +1,23 @@
-import { agent, toLangChainMessages } from './model';
+import { agent } from './model';
 import index from '../index.html';
 
 export const routes = {
   '/*': index,
   '/api/chat': {
     async POST(req: Request) {
-      const { messages } = (await req.json()) as {
-        messages: { role: string; content: string }[];
+      const { message, threadId } = (await req.json()) as {
+        message?: string;
+        threadId?: string;
       };
 
-      return new Response(agent.createStream(toLangChainMessages(messages)), {
+      if (!message || !threadId) {
+        return new Response(JSON.stringify({ error: 'message and threadId are required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(agent.createStream(message, threadId), {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',

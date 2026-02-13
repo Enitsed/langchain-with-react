@@ -1,6 +1,5 @@
 import { ChatBedrockConverse } from '@langchain/aws';
-import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
-import type { BaseMessage } from '@langchain/core/messages';
+import { MemorySaver } from '@langchain/langgraph';
 import { createAgent } from './agent';
 
 const model = new ChatBedrockConverse({
@@ -10,14 +9,6 @@ const model = new ChatBedrockConverse({
   maxTokens: 2048,
 });
 
-export const agent = createAgent(model);
+const checkpointer = new MemorySaver();
 
-export function toLangChainMessages(
-  messages: { role: string; content: string }[],
-): BaseMessage[] {
-  return messages.map((msg) => {
-    if (msg.role === 'user') return new HumanMessage(msg.content);
-    if (msg.role === 'assistant') return new AIMessage(msg.content);
-    return new SystemMessage(msg.content);
-  });
-}
+export const agent = createAgent(model, checkpointer);

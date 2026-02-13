@@ -1,10 +1,15 @@
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import {
-  SystemMessage,
-  ToolMessage,
+  HumanMessage,
+  isAIMessage,
+  isAIMessageChunk,
+  isToolMessage,
+  type BaseMessage,
+  type BaseMessageChunk,
 } from '@langchain/core/messages';
 import type { ChatBedrockConverse } from '@langchain/aws';
-import type { BaseMessage } from '@langchain/core/messages';
-import { tools, executeTool } from './tools';
+import type { MemorySaver } from '@langchain/langgraph';
+import { tools } from './tools';
 import { sseEncode, sseDone, sseError } from './sse';
 
 const SYSTEM_PROMPT =
@@ -14,9 +19,9 @@ const SYSTEM_PROMPT =
   'For general knowledge, explanations, coding help, or anything you can answer confidently from your training data, ' +
   'respond directly without searching.';
 
-const MAX_TOOL_ITERATIONS = 5;
+const RECURSION_LIMIT = 10;
 
-function extractText(content: unknown): string {
+function extractContent(content: unknown): string {
   if (content == null) return '';
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -31,66 +36,64 @@ function extractText(content: unknown): string {
   return '';
 }
 
-export function createAgent(model: ChatBedrockConverse) {
-  const modelWithTools = model.bindTools(tools);
+export function createAgent(model: ChatBedrockConverse, checkpointer: MemorySaver) {
+  const agent = createReactAgent({
+    llm: model,
+    tools,
+    prompt: SYSTEM_PROMPT,
+    checkpointer,
+  });
 
   return {
-    createStream(langchainMessages: BaseMessage[]): ReadableStream<Uint8Array> {
+    createStream(message: string, threadId: string): ReadableStream<Uint8Array> {
       return new ReadableStream({
         async start(controller) {
           try {
-            const currentMessages: BaseMessage[] = [
-              new SystemMessage(SYSTEM_PROMPT),
-              ...langchainMessages,
-            ];
-            let toolsUsed = false;
+            const stream = await agent.stream(
+              { messages: [new HumanMessage(message)] },
+              { streamMode: ['updates', 'messages'], recursionLimit: RECURSION_LIMIT, configurable: { thread_id: threadId } },
+            );
 
-            for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-              const response = await modelWithTools.invoke(currentMessages);
-              if (response == null) break;
+            for await (const chunk of stream) {
+              const [mode, data] = chunk as [string, unknown];
 
-              const toolCalls = response.tool_calls;
-              if (toolCalls == null || toolCalls.length === 0) {
-                if (!toolsUsed) {
-                  const text = extractText(response.content);
+              if (mode === 'updates') {
+                const update = data as Record<string, { messages?: unknown[] }>;
+                for (const [nodeName, nodeOutput] of Object.entries(update)) {
+                  const messages = nodeOutput?.messages;
+                  if (!Array.isArray(messages)) continue;
+
+                  for (const msg of messages as BaseMessage[]) {
+                    if (nodeName === 'agent' && isAIMessage(msg)) {
+                      const toolCalls = msg.tool_calls;
+                      if (toolCalls && toolCalls.length > 0) {
+                        for (const tc of toolCalls) {
+                          controller.enqueue(
+                            sseEncode({
+                              type: 'tool_call',
+                              name: tc.name ?? 'unknown',
+                              args: (tc.args as Record<string, unknown>) ?? {},
+                            }),
+                          );
+                        }
+                      }
+                    } else if (nodeName === 'tools' && isToolMessage(msg)) {
+                      controller.enqueue(
+                        sseEncode({
+                          type: 'tool_result',
+                          name: msg.name ?? 'unknown',
+                        }),
+                      );
+                    }
+                  }
+                }
+              } else if (mode === 'messages') {
+                const [message] = data as [BaseMessageChunk, unknown];
+                if (isAIMessageChunk(message)) {
+                  const text = extractContent(message.content);
                   if (text) {
                     controller.enqueue(sseEncode({ content: text }));
                   }
-                }
-                break;
-              }
-
-              toolsUsed = true;
-              currentMessages.push(response as BaseMessage);
-
-              for (const tc of toolCalls) {
-                const toolName = tc.name ?? 'unknown';
-                const toolArgs = (tc.args as Record<string, unknown> | undefined) ?? {};
-                const toolCallId = tc.id ?? `call_${i}`;
-
-                controller.enqueue(
-                  sseEncode({ type: 'tool_call', name: toolName, args: toolArgs }),
-                );
-
-                const result = await executeTool(toolName, toolArgs);
-
-                controller.enqueue(
-                  sseEncode({ type: 'tool_result', name: toolName }),
-                );
-
-                currentMessages.push(
-                  new ToolMessage({ content: result, tool_call_id: toolCallId }) as BaseMessage,
-                );
-              }
-            }
-
-            if (toolsUsed) {
-              const stream = await modelWithTools.stream(currentMessages);
-              for await (const chunk of stream) {
-                if (chunk == null) continue;
-                const text = extractText(chunk.content);
-                if (text) {
-                  controller.enqueue(sseEncode({ content: text }));
                 }
               }
             }

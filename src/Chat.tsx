@@ -77,7 +77,13 @@ export function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const newChat = () => {
+    setMessages([]);
+    setThreadId(crypto.randomUUID());
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -101,9 +107,7 @@ export function Chat() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages.map(({ role, content }) => ({ role, content })),
-        }),
+        body: JSON.stringify({ message: trimmed, threadId }),
       });
 
       const reader = res.body?.getReader();
@@ -133,7 +137,6 @@ export function Chat() {
             toolStatus = "Generating response...";
           } else if (event.content) {
             accumulated += event.content;
-            toolStatus = "";
           }
 
           setMessages([
@@ -156,6 +159,11 @@ export function Chat() {
 
   return (
     <div className="flex flex-col h-[600px]">
+      <div className="flex justify-end p-2 border-b">
+        <Button variant="outline" size="sm" onClick={newChat} disabled={isLoading}>
+          New Chat
+        </Button>
+      </div>
       <div className="flex-1 overflow-y-auto space-y-3 p-4">
         {messages.length === 0 && (
           <p className="text-muted-foreground text-center mt-8">
