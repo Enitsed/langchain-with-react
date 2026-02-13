@@ -6,6 +6,7 @@ const server = Bun.serve({
     hmr: true,
     console: true,
   },
+  port: 8080,
 });
 
 console.log(`Server running at ${server.url}`);
