@@ -1,10 +1,20 @@
 import { agent } from './model';
+import { isRateLimited } from './rate-limit';
 import index from '../index.html';
 
 export const routes = {
   '/*': index,
   '/api/chat': {
     async POST(req: Request) {
+      // Rate limit check
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+      if (isRateLimited(ip)) {
+        return new Response(JSON.stringify({ error: 'Too many requests' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+        });
+      }
+
       const { message, threadId } = (await req.json()) as {
         message?: string;
         threadId?: string;

@@ -8,7 +8,7 @@ export function App() {
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-center">
-            사기꾼 김구라
+            찐만두
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
