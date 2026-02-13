@@ -1,5 +1,5 @@
 import { agent, toLangChainMessages } from './model';
-import index from './index.html';
+import index from '../index.html';
 
 export const routes = {
   '/*': index,

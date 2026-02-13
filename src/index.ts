@@ -1,4 +1,4 @@
-import { routes } from './routes';
+import { routes } from './server/routes';
 
 const server = Bun.serve({
   routes,
