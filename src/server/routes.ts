@@ -26,4 +26,21 @@ export const routes = {
       });
     },
   },
+  '/api/chat/sessions/:threadId': {
+    async GET(req: Request) {
+      const { threadId } = (req as Request & { params: { threadId: string } }).params;
+      const messages = await agent.getMessages(threadId);
+
+      if (!messages) {
+        return new Response(JSON.stringify({ error: 'Session not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify(messages), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  },
 } as const;

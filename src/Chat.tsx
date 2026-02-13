@@ -78,11 +78,38 @@ export function Chat() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
+  const [showLoadInput, setShowLoadInput] = useState(false);
+  const [loadSessionId, setLoadSessionId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const newChat = () => {
     setMessages([]);
     setThreadId(crypto.randomUUID());
+    setShowLoadInput(false);
+    setLoadSessionId("");
+  };
+
+  const copyThreadId = () => {
+    navigator.clipboard.writeText(threadId);
+  };
+
+  const loadSession = async () => {
+    const id = loadSessionId.trim();
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/chat/sessions/${id}`);
+      if (!res.ok) {
+        alert("Session not found");
+        return;
+      }
+      const loaded = (await res.json()) as Message[];
+      setMessages(loaded);
+      setThreadId(id);
+      setShowLoadInput(false);
+      setLoadSessionId("");
+    } catch {
+      alert("Failed to load session");
+    }
   };
 
   useEffect(() => {
@@ -159,7 +186,34 @@ export function Chat() {
 
   return (
     <div className="flex flex-col h-[600px]">
-      <div className="flex justify-end p-2 border-b">
+      <div className="flex items-center gap-2 p-2 border-b">
+        <div className="flex items-center gap-1 mr-auto">
+          <code className="text-xs text-muted-foreground">{threadId.slice(0, 8)}</code>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={copyThreadId} title="Copy session ID">
+            <span className="text-xs">📋</span>
+          </Button>
+        </div>
+        {showLoadInput ? (
+          <div className="flex items-center gap-1">
+            <Input
+              value={loadSessionId}
+              onChange={(e) => setLoadSessionId(e.target.value)}
+              placeholder="Enter session ID..."
+              className="h-7 w-48 text-xs"
+              onKeyDown={(e) => e.key === "Enter" && loadSession()}
+            />
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={loadSession}>
+              Load
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setShowLoadInput(false); setLoadSessionId(""); }}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" onClick={() => setShowLoadInput(true)} disabled={isLoading}>
+            Load Session
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={newChat} disabled={isLoading}>
           New Chat
         </Button>

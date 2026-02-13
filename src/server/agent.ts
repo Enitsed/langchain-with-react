@@ -45,6 +45,24 @@ export function createAgent(model: ChatBedrockConverse, checkpointer: MemorySave
   });
 
   return {
+    async getMessages(threadId: string): Promise<{ role: 'user' | 'assistant'; content: string }[] | null> {
+      try {
+        const state = await agent.getState({ configurable: { thread_id: threadId } });
+        const messages = state?.values?.messages as BaseMessage[] | undefined;
+        if (!messages || messages.length === 0) return null;
+
+        return messages
+          .filter((msg) => !isToolMessage(msg))
+          .map((msg) => ({
+            role: (isAIMessage(msg) ? 'assistant' : 'user') as 'user' | 'assistant',
+            content: extractContent(msg.content),
+          }))
+          .filter((msg) => msg.content.length > 0);
+      } catch {
+        return null;
+      }
+    },
+
     createStream(message: string, threadId: string): ReadableStream<Uint8Array> {
       return new ReadableStream({
         async start(controller) {
