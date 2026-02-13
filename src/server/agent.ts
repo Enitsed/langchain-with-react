@@ -2,7 +2,7 @@ import {
   SystemMessage,
   ToolMessage,
 } from '@langchain/core/messages';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { ChatBedrockConverse } from '@langchain/aws';
 import type { BaseMessage } from '@langchain/core/messages';
 import { tools, executeTool } from './tools';
 import { sseEncode, sseDone, sseError } from './sse';
@@ -31,7 +31,7 @@ function extractText(content: unknown): string {
   return '';
 }
 
-export function createAgent(model: BaseChatModel) {
+export function createAgent(model: ChatBedrockConverse) {
   const modelWithTools = model.bindTools(tools);
 
   return {
